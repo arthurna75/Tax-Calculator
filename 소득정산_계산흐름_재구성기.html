@@ -1,0 +1,819 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>소득정산 계산흐름 재구성기</title>
+<script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    font-family: "맑은 고딕", "Malgun Gothic", -apple-system, sans-serif;
+    background: linear-gradient(135deg, #f5f7fb 0%, #e8eef8 100%);
+    margin: 0; padding: 40px 20px; color: #222; min-height: 100vh;
+  }
+  .container { max-width: 880px; margin: 0 auto; }
+  header {
+    background: linear-gradient(135deg, #1F4E78 0%, #2E75B6 100%);
+    color: #fff; padding: 32px 36px; border-radius: 16px 16px 0 0;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.08);
+  }
+  header h1 { margin: 0 0 8px 0; font-size: 26px; }
+  header p  { margin: 0; opacity: 0.92; font-size: 15px; line-height: 1.5; }
+  .panel {
+    background: #fff; padding: 32px 36px; border-radius: 0 0 16px 16px;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.08);
+  }
+  .dropzone {
+    border: 2.5px dashed #b6cce8; border-radius: 14px; padding: 48px 24px;
+    text-align: center; cursor: pointer; transition: all .15s;
+    background: #f9fbfd;
+  }
+  .dropzone:hover, .dropzone.drag { border-color: #2E75B6; background: #eef5fc; }
+  .dropzone .icon { font-size: 48px; line-height: 1; margin-bottom: 12px; }
+  .dropzone .main { font-size: 17px; font-weight: 600; color: #1F4E78; margin-bottom: 6px; }
+  .dropzone .sub  { font-size: 13px; color: #6a7a8c; }
+  input[type=file] { display: none; }
+  .filename {
+    margin-top: 18px; padding: 12px 16px; background: #eef5fc;
+    border-radius: 10px; font-size: 14px; color: #1F4E78;
+    display: none;
+  }
+  .filename.show { display: block; }
+  .actions { margin-top: 24px; display: flex; gap: 12px; flex-wrap: wrap; }
+  button {
+    border: none; padding: 14px 26px; border-radius: 10px;
+    font-size: 15px; font-weight: 600; cursor: pointer;
+    font-family: inherit; transition: all .15s;
+  }
+  button.primary { background: #2E75B6; color: #fff; }
+  button.primary:hover:not(:disabled) { background: #1F4E78; }
+  button.primary:disabled { background: #b8c5d4; cursor: not-allowed; }
+  button.success { background: #2e7d32; color: #fff; }
+  button.success:hover:not(:disabled) { background: #1b5e20; }
+  button.success:disabled { background: #c8d3c8; cursor: not-allowed; }
+  button.ghost { background: #f0f3f7; color: #5a6878; }
+  button.ghost:hover { background: #e5ebf2; }
+  .status {
+    margin-top: 22px; padding: 16px 20px; border-radius: 10px;
+    font-size: 14px; line-height: 1.55; display: none;
+  }
+  .status.show { display: block; }
+  .status.ok    { background: #e2efda; color: #2e5e1f; border-left: 4px solid #4caf50; }
+  .status.err   { background: #fce4e4; color: #8b2020; border-left: 4px solid #e53935; }
+  .status.info  { background: #fff2cc; color: #6b5400; border-left: 4px solid #f5b941; }
+  .preview {
+    margin-top: 22px; display: none;
+    border: 1px solid #e1e8ef; border-radius: 10px; overflow: hidden;
+  }
+  .preview.show { display: block; }
+  .preview h3 {
+    margin: 0; padding: 12px 18px; background: #1F4E78;
+    color: #fff; font-size: 14px; font-weight: 600;
+  }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { padding: 9px 14px; text-align: left; border-bottom: 1px solid #eef1f5; }
+  th { background: #f7f9fc; font-weight: 600; color: #4a5868; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; color: #1F4E78; }
+  td.neg { color: #c0392b; }
+  .footer-note {
+    margin-top: 24px; padding: 16px 20px; background: #f7f9fc;
+    border-radius: 10px; font-size: 12.5px; color: #5a6878; line-height: 1.6;
+  }
+  .footer-note strong { color: #1F4E78; }
+</style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <h1>소득정산 계산흐름 재구성기</h1>
+    <p>국세청 연말정산 기초자료(.xlsx)를 업로드하면 9단계 계산 흐름과 카드 초과사용 분석이 포함된 보기 좋은 엑셀을 만들어 드립니다.</p>
+  </header>
+  <div class="panel">
+    <label class="dropzone" id="dropzone" for="fileInput">
+      <div class="icon">📊</div>
+      <div class="main">엑셀 파일을 끌어다 놓거나 클릭하여 선택</div>
+      <div class="sub">소득정산기초자료(년도).xlsx 형식의 파일을 선택해 주세요</div>
+      <input type="file" id="fileInput" accept=".xlsx,.xls">
+    </label>
+    <div class="filename" id="filename"></div>
+
+    <div class="actions">
+      <button class="primary" id="processBtn" disabled>🔄 변환하기</button>
+      <button class="success" id="downloadBtn" disabled>📥 결과 파일 다운로드</button>
+      <button class="ghost" id="resetBtn">초기화</button>
+    </div>
+
+    <div class="status" id="status"></div>
+
+    <div class="preview" id="preview">
+      <h3>주요 항목 추출 결과 (미리보기)</h3>
+      <table id="previewTable"></table>
+    </div>
+
+    <div class="footer-note">
+      <strong>처리 방식</strong> · 업로드된 파일은 브라우저 안에서만 처리되며 외부 서버로 전송되지 않습니다.<br>
+      <strong>입력 형식</strong> · 첫 번째 시트에 "정산항목코드"·"처리금액" 열이 있는 모든 파일을 인식합니다.<br>
+      <strong>출력</strong> · 9개 시트(한눈에보기·총급여·근로소득·소득공제·신용카드공제·과세표준·세액공제·환급·초과사용액분석)로 구성된 .xlsx 파일을 생성합니다.
+    </div>
+  </div>
+</div>
+
+<script>
+const FONT_KR = "맑은 고딕";
+
+function S(opts) {
+  const s = {};
+  s.font = { name: FONT_KR, sz: opts.size || 11 };
+  if (opts.bold)   s.font.bold = true;
+  if (opts.italic) s.font.italic = true;
+  if (opts.color)  s.font.color = { rgb: opts.color };
+  if (opts.fill)   s.fill = { patternType: "solid", fgColor: { rgb: opts.fill } };
+  if (opts.align)  s.alignment = { ...opts.align, wrapText: true };
+  if (opts.fmt)    s.numFmt = opts.fmt;
+  if (opts.border) {
+    const t = { style: "thin", color: { rgb: "BFBFBF" } };
+    s.border = { top: t, bottom: t, left: t, right: t };
+  }
+  return s;
+}
+
+const TITLE_STYLE  = S({ bold:true, size:16, color:"FFFFFF", fill:"1F4E78", align:{horizontal:"center",vertical:"center"} });
+const STEP_STYLE   = S({ bold:true, size:12, color:"FFFFFF", fill:"2E75B6", align:{horizontal:"center",vertical:"center"} });
+const HEAD_STYLE   = S({ bold:true, size:11, color:"FFFFFF", fill:"305496", align:{horizontal:"center",vertical:"center"}, border:true });
+const SUB_FILL     = "D9E1F2";
+const RESULT_FILL  = "FFF2CC";
+const FINAL_FILL   = "FCE4D6";
+
+const ALIGN_C = { horizontal:"center", vertical:"center" };
+const ALIGN_L = { horizontal:"left",   vertical:"center", indent:1 };
+const ALIGN_R = { horizontal:"right",  vertical:"center" };
+
+// 수식으로 인식할 수 있는 패턴: "="로 시작하고 두 번째 문자가 영문/괄호/숫자/시트참조 부호
+function looksLikeFormula(s) {
+  if (typeof s !== "string" || !s.startsWith("=") || s.length < 2) return false;
+  const c2 = s.charCodeAt(1);
+  // A-Z, a-z, (, ', SUM 류, 디지트
+  return (c2 >= 65 && c2 <= 90) || (c2 >= 97 && c2 <= 122) || c2 === 40 || c2 === 39 || (c2 >= 48 && c2 <= 57);
+}
+function setCell(ws, addr, value, style) {
+  const cell = { v: value };
+  if (looksLikeFormula(value)) {
+    cell.f = value.slice(1); cell.v = 0; cell.t = "n";
+  } else if (typeof value === "number") { cell.t = "n"; }
+  else { cell.t = "s"; }
+  if (style) cell.s = style;
+  ws[addr] = cell;
+}
+function setRange(ws, range) { ws["!ref"] = range; }
+function mergeCells(ws, range) {
+  if (!ws["!merges"]) ws["!merges"] = [];
+  ws["!merges"].push(XLSX.utils.decode_range(range));
+}
+function setCols(ws, widths) { ws["!cols"] = widths.map(w => ({ wch: w })); }
+function setRowHeight(ws, row, h) {
+  if (!ws["!rows"]) ws["!rows"] = [];
+  ws["!rows"][row - 1] = { hpt: h };
+}
+
+function parseInput(workbook) {
+  const map = {};
+  let foundAnywhere = false;
+  for (const sn of workbook.SheetNames) {
+    const ws = workbook.Sheets[sn];
+    const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null });
+    if (!rows.length) continue;
+    let headerRow = -1, codeCol = -1, valCol = -1;
+    for (let r = 0; r < Math.min(rows.length, 10); r++) {
+      const row = rows[r] || [];
+      for (let c = 0; c < row.length; c++) {
+        const v = String(row[c] || "").trim();
+        if (v === "정산항목코드") { codeCol = c; headerRow = r; }
+        if (v === "처리금액")     { valCol  = c; }
+      }
+      if (headerRow >= 0 && codeCol >= 0 && valCol >= 0) break;
+    }
+    if (headerRow < 0 || codeCol < 0 || valCol < 0) continue;
+    foundAnywhere = true;
+    for (let r = headerRow + 1; r < rows.length; r++) {
+      const row = rows[r] || [];
+      const code = String(row[codeCol] || "").trim();
+      let val = row[valCol];
+      if (!code) continue;
+      if (val === null || val === undefined || val === "") val = 0;
+      if (typeof val === "string") val = Number(val.replace(/,/g, "")) || 0;
+      if (!(code in map) || map[code] === 0) map[code] = val;
+    }
+  }
+  if (!foundAnywhere) throw new Error("'정산항목코드' 또는 '처리금액' 열을 찾을 수 없습니다.");
+  return map;
+}
+
+function num(m, code, fallback = 0) {
+  const v = m[code];
+  return (typeof v === "number") ? v : fallback;
+}
+
+function buildOutput(d) {
+  const wb = XLSX.utils.book_new();
+  const v = (c) => num(d, c);
+
+  // ---------- Sheet 1: 한눈에보기 ----------
+  {
+    const ws = {};
+    setCols(ws, [4, 38, 4, 22, 4, 38]);
+    setCell(ws, "B2", "2025년도 연말정산 — 계산 흐름 한눈에 보기", TITLE_STYLE);
+    mergeCells(ws, "B2:F2"); setRowHeight(ws, 2, 32);
+
+    setCell(ws, "B4", "■ 최종 결과 — 환급/납부", STEP_STYLE); mergeCells(ws, "B4:F4");
+    const finalL = S({ bold:true, size:11, fill:FINAL_FILL, align:ALIGN_L });
+    setCell(ws, "B5", "차감_소득세 (환급/추가납부)", finalL);
+    setCell(ws, "D5", v("G910"), S({ size:11, color:"0000FF", fill:FINAL_FILL, align:ALIGN_R, fmt:'#,##0"원";[Red](#,##0"원")' }));
+    setCell(ws, "B6", "차감_지방소득세 (환급/추가납부)", finalL);
+    setCell(ws, "D6", v("G911"), S({ size:11, color:"0000FF", fill:FINAL_FILL, align:ALIGN_R, fmt:'#,##0"원";[Red](#,##0"원")' }));
+    setCell(ws, "B7", "총 환급(△)/납부 합계", finalL);
+    setCell(ws, "D7", "=D5+D6", S({ bold:true, size:12, color:"C00000", fill:FINAL_FILL, align:ALIGN_R, fmt:'#,##0"원";[Red](#,##0"원")' }));
+
+    setCell(ws, "B9", "■ 8단계 계산 흐름", STEP_STYLE); mergeCells(ws, "B9:F9");
+    const subL = S({ bold:true, fill:SUB_FILL, align:ALIGN_L });
+    const flow = [
+      ["①", "급여+상여 = 소득총액",                       v("S001") + v("S002")],
+      ["②", "소득총액 − 비과세 = 총급여액",              v("S030")],
+      ["③", "총급여 − 근로소득공제 = 근로소득",          v("S301")],
+      ["④", "근로소득 − 소득공제 = 과세표준",            v("G211")],
+      ["⑤", "과세표준 × 세율 = 산출세액",                 v("G212")],
+      ["⑥", "산출세액 − 세액공제 = 결정세액(소득세)",    v("G901")],
+      ["⑦", "결정세액 × 10% = 지방소득세",                v("G902")],
+      ["⑧", "결정 − 기납부 = 차감징수세액",              v("G910")],
+    ];
+    let r = 10;
+    flow.forEach(([s, desc, val]) => {
+      setCell(ws, `B${r}`, `  ${s}  ${desc}`, subL); mergeCells(ws, `B${r}:E${r}`);
+      setCell(ws, `F${r}`, val, S({ bold:true, color:"0000FF", size:12, fill:SUB_FILL, align:ALIGN_R, fmt:'#,##0' }));
+      r++;
+    });
+    r++;
+    setCell(ws, `B${r}`,
+      "※ 각 단계의 상세 계산은 시트 2~7에서, 카드 사용 효율 분석은 시트 8에서 확인할 수 있습니다. 파란색 셀(입력)을 바꾸면 결과가 자동 재계산됩니다.",
+      S({ italic:true, size:10, color:"555555", align:{horizontal:"left",vertical:"center"} }));
+    mergeCells(ws, `B${r}:F${r}`); setRowHeight(ws, r, 30);
+    setRange(ws, `A1:F${r+1}`);
+    XLSX.utils.book_append_sheet(wb, ws, "1.한눈에보기");
+  }
+
+  // ---------- Sheet 2: 총급여 ----------
+  {
+    const ws = {};
+    setCols(ws, [4, 6, 30, 22, 30]);
+    setCell(ws, "B2", "STEP 1.  총급여액 계산", TITLE_STYLE); mergeCells(ws, "B2:E2"); setRowHeight(ws, 2, 28);
+    ["부호","항목","금액(원)","설명"].forEach((h, i) => setCell(ws, `${"BCDE"[i]}4`, h, HEAD_STYLE));
+    const rows = [
+      ["+", "급여소득 (S001)",      v("S001"),    "기본 급여"],
+      ["+", "상여소득 (S002)",      v("S002"),    "각종 상여금"],
+      ["=", "소득총액 (S004)",      "=D5+D6",     "급여 + 상여"],
+      ["−", "비과세 — 자가운전 (S013)", v("S013"),"월 20만원 한도 비과세"],
+      ["=", "비과세 합계 (S019)",   "=D8",        "비과세 항목 합계"],
+      ["=", "총급여액 (S030)",      "=D7-D9",     "▶ 다음 단계의 출발점"],
+    ];
+    let r = 5;
+    rows.forEach(([sign, name, val, note]) => {
+      const isSum = (sign === "=");
+      const isFinal = (r === 10);
+      const fill = isFinal ? FINAL_FILL : (isSum ? RESULT_FILL : undefined);
+      const big = isFinal;
+      const fontC = (typeof val === "number") ? "0000FF" : "000000";
+      setCell(ws, `B${r}`, sign, S({ fill, align:ALIGN_C, border:true, bold:isSum, size: big?12:11 }));
+      setCell(ws, `C${r}`, name, S({ fill, align:ALIGN_L, border:true, bold:isSum, size: big?12:11 }));
+      setCell(ws, `D${r}`, val,  S({ fill, align:ALIGN_R, border:true, bold:isSum, color:fontC, size: big?12:11, fmt:'#,##0' }));
+      setCell(ws, `E${r}`, note, S({ fill, align:ALIGN_L, border:true, bold:isSum, size: big?12:11 }));
+      r++;
+    });
+    setRange(ws, "A1:E11");
+    XLSX.utils.book_append_sheet(wb, ws, "2.총급여");
+  }
+
+  // ---------- Sheet 3: 근로소득 ----------
+  {
+    const ws = {};
+    setCols(ws, [4, 6, 32, 22, 44]);
+    setCell(ws, "B2", "STEP 2.  근로소득금액 계산", TITLE_STYLE); mergeCells(ws, "B2:E2"); setRowHeight(ws, 2, 28);
+    ["부호","항목","금액(원)","설명"].forEach((h, i) => setCell(ws, `${"BCDE"[i]}4`, h, HEAD_STYLE));
+    const rows = [
+      ["+", "총급여액 (이전 단계)", "='2.총급여'!D10",  "STEP 1 결과"],
+      ["−", "근로소득공제 (G001)",  v("G001"),          "총급여 구간별 공제"],
+      ["=", "근로소득금액 (S301)",  "=D5-D6",           "▶ 소득공제 적용 전 소득"],
+    ];
+    let r = 5;
+    rows.forEach(([sign, name, val, note]) => {
+      const isFinal = (sign === "=" && r === 7);
+      const fill = isFinal ? FINAL_FILL : (sign === "=" ? RESULT_FILL : undefined);
+      const big = isFinal;
+      const fontC = (typeof val === "number") ? "0000FF" : "000000";
+      setCell(ws, `B${r}`, sign, S({ fill, align:ALIGN_C, border:true, bold:isFinal, size: big?12:11 }));
+      setCell(ws, `C${r}`, name, S({ fill, align:ALIGN_L, border:true, bold:isFinal, size: big?12:11 }));
+      setCell(ws, `D${r}`, val,  S({ fill, align:ALIGN_R, border:true, bold:isFinal, color:fontC, size: big?12:11, fmt:'#,##0' }));
+      setCell(ws, `E${r}`, note, S({ fill, align:ALIGN_L, border:true, bold:isFinal, size: big?12:11 }));
+      r++;
+    });
+    setCell(ws, "B9", "참고 — 근로소득공제 산식 (2025년 기준)", STEP_STYLE); mergeCells(ws, "B9:E9");
+    const brackets = [
+      ["총급여 구간", "공제액"],
+      ["500만원 이하",       "총급여 × 70%"],
+      ["500만 ~ 1,500만원",   "350만 + (총급여−500만)×40%"],
+      ["1,500만 ~ 4,500만원", "750만 + (총급여−1,500만)×15%"],
+      ["4,500만 ~ 1억원",     "1,200만 + (총급여−4,500만)×5%"],
+      ["1억원 초과",          "1,475만 + (총급여−1억)×2%"],
+    ];
+    r = 10;
+    brackets.forEach((row, i) => {
+      const fill = i === 0 ? SUB_FILL : undefined;
+      const bold = i === 0;
+      setCell(ws, `B${r}`, row[0], S({ fill, align:ALIGN_L, border:true, bold })); mergeCells(ws, `B${r}:C${r}`);
+      setCell(ws, `D${r}`, row[1], S({ fill, align:ALIGN_L, border:true, bold })); mergeCells(ws, `D${r}:E${r}`);
+      r++;
+    });
+    setRange(ws, "A1:E15");
+    XLSX.utils.book_append_sheet(wb, ws, "3.근로소득");
+  }
+
+  // ---------- Sheet 4: 소득공제 ----------
+  {
+    const ws = {};
+    setCols(ws, [4, 6, 34, 22, 38]);
+    setCell(ws, "B2", "STEP 3.  소득공제 — 인적·특별·연금·기타", TITLE_STYLE); mergeCells(ws, "B2:E2"); setRowHeight(ws, 2, 28);
+    function sh(r, title) {
+      setCell(ws, `B${r}`, title, STEP_STYLE); mergeCells(ws, `B${r}:E${r}`);
+    }
+    function line(r, sign, name, amount, note, isTotal=false, isFinal=false) {
+      const fill = isFinal ? FINAL_FILL : (isTotal ? RESULT_FILL : undefined);
+      const big = isFinal;
+      const fontC = (typeof amount === "number") ? "0000FF" : "000000";
+      setCell(ws, `B${r}`, sign, S({ fill, align:ALIGN_C, border:true, bold:isTotal, size: big?12:11 }));
+      setCell(ws, `C${r}`, name, S({ fill, align:ALIGN_L, border:true, bold:isTotal, size: big?12:11 }));
+      setCell(ws, `D${r}`, amount, S({ fill, align:ALIGN_R, border:true, bold:isTotal, color:fontC, size: big?12:11, fmt:'#,##0' }));
+      setCell(ws, `E${r}`, note, S({ fill, align:ALIGN_L, border:true, bold:isTotal, size: big?12:11 }));
+    }
+    let r = 4;
+    sh(r, "① 인적공제 (G014)"); r++;
+    line(r++, "+", "본인공제 (G002)",      v("G002"), "본인 1명 × 150만원");
+    line(r++, "+", "부양가족공제 (G004)",  v("G004"), "부양가족 × 150만원");
+    line(r++, "=", "기본공제 소계 (G005)", "=D5+D6", "본인+부양", true);
+    line(r++, "+", "경로우대공제 (G007)",  v("G007"), "70세 이상 × 100만원");
+    line(r++, "=", "추가공제 소계 (G011)", "=D8",     "추가 공제 합계", true);
+    line(r++, "=", "인적공제 합계",         "=D7+D9", "▶ 기본 + 추가", true);
+    r++;
+    sh(r, "② 특별소득공제 — 보험료 (G136)"); r++;
+    const sr1 = r;
+    line(r++, "+", "건강보험료 (G111)",    v("G111"), "");
+    line(r++, "+", "장기요양보험료 (G154)", v("G154"), "");
+    line(r++, "+", "고용보험료 (G112)",     v("G112"), "");
+    line(r++, "=", "특별공제계",            `=D${sr1}+D${sr1+1}+D${sr1+2}`, "공적보험료 본인부담분", true);
+    r++;
+    sh(r, "③ 연금보험료공제"); r++;
+    line(r++, "+", "국민연금보험료공제 (G015)", v("G015"), "본인부담분 전액 공제", true);
+    r++;
+    sh(r, "④ 기타소득공제 (G210)"); r++;
+    const sr2 = r;
+    line(r++, "+", "투자조합출자공제 (G218)", v("G218"), "벤처기업 등 출자");
+    line(r++, "+", "신용카드등공제액 (G225)",  v("G225"), "▶ 다음 시트 상세 참조");
+    line(r++, "=", "기타소득공제 합계",        `=D${sr2}+D${sr2+1}`, "", true);
+    r++;
+    sh(r, "▣ 소득공제 합계 (STEP 3 결과)"); r++;
+    line(r++, "=", "총 소득공제", "=D10+D16+D19+D24", "인적 + 특별 + 연금 + 기타", true, true);
+    setRange(ws, `A1:E${r}`);
+    XLSX.utils.book_append_sheet(wb, ws, "4.소득공제");
+  }
+
+  // ---------- Sheet 4-1: 신용카드공제 상세 ----------
+  {
+    const ws = {};
+    setCols(ws, [4, 32, 18, 18, 22, 40]);
+    setCell(ws, "B2", "STEP 3-1.  신용카드 등 공제 상세", TITLE_STYLE); mergeCells(ws, "B2:F2"); setRowHeight(ws, 2, 28);
+    setCell(ws, "B4", "① 사용금액 명세", STEP_STYLE); mergeCells(ws, "B4:F4");
+    ["항목코드","사용수단","사용금액(원)","공제율","구분"].forEach((h, i) => setCell(ws, `${"BCDEF"[i]}5`, h, HEAD_STYLE));
+    const cards = [
+      ["G223", "신용카드 사용", v("G223"), 0.15, "일반"],
+      ["G205", "현금영수증", v("G205"), 0.30, "일반"],
+      ["G222", "직불/선불카드 사용", v("G222"), 0.30, "일반"],
+      ["G257", "문화체육 신용카드", v("G257"), 0.30, "도서·공연 등"],
+      ["G258", "문화체육 현금영수증", v("G258"), 0.30, "도서·공연 등"],
+      ["G259", "문화체육 직불·선불카드", v("G259"), 0.30, "도서·공연 등"],
+      ["G228", "전통시장 사용", v("G228"), 0.40, "추가 공제"],
+      ["G240", "대중교통 사용", v("G240"), 0.40, "추가 공제"],
+    ];
+    let r = 6;
+    cards.forEach(([code, name, amt, rate, cat]) => {
+      setCell(ws, `B${r}`, code, S({ align:ALIGN_C, border:true }));
+      setCell(ws, `C${r}`, name, S({ align:ALIGN_L, border:true }));
+      setCell(ws, `D${r}`, amt,  S({ align:ALIGN_R, border:true, color:"0000FF", fmt:'#,##0' }));
+      setCell(ws, `E${r}`, rate, S({ align:ALIGN_R, border:true, fmt:'0%' }));
+      setCell(ws, `F${r}`, cat,  S({ align:ALIGN_L, border:true }));
+      r++;
+    });
+    setCell(ws, `B${r}`, "", S({ fill:RESULT_FILL, border:true }));
+    setCell(ws, `C${r}`, "신용카드 사용 합계 (G913)", S({ fill:RESULT_FILL, bold:true, align:ALIGN_L, border:true }));
+    setCell(ws, `D${r}`, `=SUM(D6:D${r-1})`, S({ fill:RESULT_FILL, bold:true, align:ALIGN_R, color:"0000FF", border:true, fmt:'#,##0' }));
+    setCell(ws, `E${r}`, "", S({ fill:RESULT_FILL, border:true }));
+    setCell(ws, `F${r}`, "", S({ fill:RESULT_FILL, border:true }));
+    r += 2;
+    setCell(ws, `B${r}`, "② 공제액 계산 결과", STEP_STYLE); mergeCells(ws, `B${r}:F${r}`); r++;
+    const calcs = [
+      ["일반 신용카드 공제액 (G207)",            v("G207"), "총급여 25% 초과분 × 15%"],
+      ["직불·선불·현금영수증 공제액 (G224)",     v("G224"), "총급여 25% 초과분 × 30%"],
+      ["카드 공제 제외금액 (G231)",              v("G231"), "한도 초과 등 제외"],
+      ["전통시장 추가공제 (G230)",               v("G230"), "별도 100만원 한도"],
+      ["대중교통 추가공제 (G237)",               v("G237"), "별도 100만원 한도"],
+      ["신용카드등공제액 (G232) — 기본 한도",     v("G232"), "총급여 구간별 한도 적용"],
+      ["신용카드등공제액 (G225) — 추가포함 합계", v("G225"), "기본 + 전통시장 + 대중교통"],
+    ];
+    calcs.forEach(([name, amt, note], i) => {
+      const isFinal = (i >= calcs.length - 2);
+      const fill = isFinal ? FINAL_FILL : undefined;
+      const big = isFinal;
+      setCell(ws, `B${r}`, name, S({ fill, align:ALIGN_L, border:true, bold:isFinal, size: big?12:11 }));
+      mergeCells(ws, `B${r}:C${r}`);
+      setCell(ws, `D${r}`, amt, S({ fill, align:ALIGN_R, border:true, bold:isFinal, color:"0000FF", fmt:'#,##0', size: big?12:11 }));
+      setCell(ws, `E${r}`, note, S({ fill, align:ALIGN_L, border:true, bold:isFinal, size: big?12:11 }));
+      mergeCells(ws, `E${r}:F${r}`);
+      r++;
+    });
+    setRange(ws, `A1:F${r}`);
+    XLSX.utils.book_append_sheet(wb, ws, "4-1.신용카드공제");
+  }
+
+  // ---------- Sheet 5: 과세표준·산출세액 ----------
+  {
+    const ws = {};
+    setCols(ws, [4, 6, 34, 22, 44]);
+    setCell(ws, "B2", "STEP 4-5.  과세표준 → 산출세액", TITLE_STYLE); mergeCells(ws, "B2:E2"); setRowHeight(ws, 2, 28);
+    ["부호","항목","금액(원)","설명"].forEach((h, i) => setCell(ws, `${"BCDE"[i]}4`, h, HEAD_STYLE));
+    const baseAmt = v("G211"), incomeAmt = v("S301"), deductAmt = incomeAmt - baseAmt, taxAmt = v("G212");
+    const brackets = [
+      [14000000, 0.06, 0],
+      [50000000, 0.15, 1260000],
+      [88000000, 0.24, 5760000],
+      [150000000, 0.35, 15440000],
+      [300000000, 0.38, 19940000],
+      [500000000, 0.40, 25940000],
+      [1000000000, 0.42, 35940000],
+      [Infinity, 0.45, 65940000],
+    ];
+    let appliedIdx = 0;
+    for (let i = 0; i < brackets.length; i++) {
+      if (baseAmt <= brackets[i][0]) { appliedIdx = i; break; }
+    }
+    const [, rate, ded] = brackets[appliedIdx];
+    const rows = [
+      ["+", "근로소득금액",        incomeAmt, "STEP 2 결과"],
+      ["−", "소득공제 합계",       deductAmt, "인적+특별+연금+기타"],
+      ["=", "과세표준 (G211)",     "=D5-D6",  "▶ 세율을 곱하는 기준 금액"],
+      ["×", "세율 (구간별 누진세율)", "",      `${(rate*100).toFixed(0)}% 구간 (누진공제 ${(ded/10000).toLocaleString()}만원)`],
+      ["=", "산출세액 (G212)",     taxAmt,    "▶ 세액공제 적용 전 세금"],
+    ];
+    let r = 5;
+    rows.forEach(([sign, name, val, note]) => {
+      const isFinal = (sign === "=" && r === 9);
+      const isSum   = (sign === "=");
+      const fill = isFinal ? FINAL_FILL : (isSum ? RESULT_FILL : undefined);
+      const big = isFinal;
+      const fontC = (typeof val === "number") ? "0000FF" : "000000";
+      setCell(ws, `B${r}`, sign, S({ fill, align:ALIGN_C, border:true, bold:isSum, size: big?12:11 }));
+      setCell(ws, `C${r}`, name, S({ fill, align:ALIGN_L, border:true, bold:isSum, size: big?12:11 }));
+      setCell(ws, `D${r}`, val,  S({ fill, align:ALIGN_R, border:true, bold:isSum, color:fontC, size: big?12:11, fmt:'#,##0' }));
+      setCell(ws, `E${r}`, note, S({ fill, align:ALIGN_L, border:true, bold:isSum, size: big?12:11 }));
+      r++;
+    });
+    setCell(ws, "B11", "참고 — 종합소득세율 (2025년 기준)", STEP_STYLE); mergeCells(ws, "B11:E11");
+    const taxTable = [
+      ["과세표준 구간", "세율", "누진공제"],
+      ["1,400만원 이하", "6%",  "−"],
+      ["1,400만 ~ 5,000만원", "15%", "126만원"],
+      ["5,000만 ~ 8,800만원", "24%", "576만원"],
+      ["8,800만 ~ 1.5억원", "35%", "1,544만원"],
+      ["1.5억 ~ 3억원",    "38%", "1,994만원"],
+      ["3억 ~ 5억원",      "40%", "2,594만원"],
+      ["5억 ~ 10억원",     "42%", "3,594만원"],
+      ["10억원 초과",      "45%", "6,594만원"],
+    ];
+    r = 12;
+    taxTable.forEach((row, i) => {
+      const isApplied = (i - 1 === appliedIdx);
+      const fill = i === 0 ? SUB_FILL : (isApplied ? RESULT_FILL : undefined);
+      const bold = i === 0 || isApplied;
+      setCell(ws, `B${r}`, row[0] + (isApplied ? "  ◀ 본 건 해당" : ""), S({ fill, align:ALIGN_L, border:true, bold })); mergeCells(ws, `B${r}:C${r}`);
+      setCell(ws, `D${r}`, row[1], S({ fill, align:ALIGN_C, border:true, bold }));
+      setCell(ws, `E${r}`, row[2], S({ fill, align:ALIGN_L, border:true, bold }));
+      r++;
+    });
+    setRange(ws, `A1:E${r}`);
+    XLSX.utils.book_append_sheet(wb, ws, "5.과세표준_산출세액");
+  }
+
+  // ---------- Sheet 6: 세액공제 ----------
+  {
+    const ws = {};
+    setCols(ws, [4, 6, 36, 20, 44]);
+    setCell(ws, "B2", "STEP 6.  세액공제 — 산출세액에서 직접 차감", TITLE_STYLE); mergeCells(ws, "B2:E2"); setRowHeight(ws, 2, 28);
+    ["부호","항목","금액(원)","설명"].forEach((h, i) => setCell(ws, `${"BCDE"[i]}4`, h, HEAD_STYLE));
+    const rows = [
+      ["+", "근로소득세액공제 (G304)",        v("G304"), "총급여 7천만 초과: 한도 50만원"],
+      ["+", "자녀세액공제 (G312)",            v("G312"), "자녀 수에 따른 공제"],
+      ["+", "보장성보험료 세액공제 (G317)",   v("G317"), "보장성보험 100만 한도 × 12%"],
+      ["+", "교육비 세액공제 (G319)",          v("G319"), "교육비 × 15%"],
+      ["+", "일반(지정)기부금 세액공제 (G322)", v("G322"), "기부금 × 15% (초과분 30%)"],
+      ["+", "퇴직연금 세액공제 (G315)",        v("G315"), "DC형 추가납입 × 12%"],
+      ["+", "연금저축 세액공제 (G316)",        v("G316"), "연금저축 × 12%"],
+      ["=", "세액공제 합계 (G309)",            "=SUM(D5:D11)", "▶ 산출세액에서 차감되는 총액"],
+    ];
+    let r = 5;
+    rows.forEach(([sign, name, val, note]) => {
+      const isFinal = (sign === "=");
+      const fill = isFinal ? FINAL_FILL : undefined;
+      const big = isFinal;
+      const fontC = (typeof val === "number") ? "0000FF" : "000000";
+      setCell(ws, `B${r}`, sign, S({ fill, align:ALIGN_C, border:true, bold:isFinal, size: big?12:11 }));
+      setCell(ws, `C${r}`, name, S({ fill, align:ALIGN_L, border:true, bold:isFinal, size: big?12:11 }));
+      setCell(ws, `D${r}`, val,  S({ fill, align:ALIGN_R, border:true, bold:isFinal, color:fontC, size: big?12:11, fmt:'#,##0' }));
+      setCell(ws, `E${r}`, note, S({ fill, align:ALIGN_L, border:true, bold:isFinal, size: big?12:11 }));
+      r++;
+    });
+    setRange(ws, "A1:E12");
+    XLSX.utils.book_append_sheet(wb, ws, "6.세액공제");
+  }
+
+  // ---------- Sheet 7: 결정·환급 ----------
+  {
+    const ws = {};
+    setCols(ws, [4, 6, 34, 22, 42]);
+    setCell(ws, "B2", "STEP 7-8.  결정세액 → 차감징수세액 (환급/납부)", TITLE_STYLE); mergeCells(ws, "B2:E2"); setRowHeight(ws, 2, 28);
+    ["부호","항목","금액(원)","설명"].forEach((h, i) => setCell(ws, `${"BCDE"[i]}4`, h, HEAD_STYLE));
+    const rows = [
+      ["+", "산출세액",                 v("G212"),   "STEP 5 결과"],
+      ["−", "세액공제 합계",            v("G309"),   "STEP 6 결과"],
+      ["=", "결정세액 — 소득세 (G901)", "=D5-D6",    "▶ 올해 최종 납부할 소득세"],
+      ["=", "결정세액 — 지방소득세 (G902)", "=ROUND(D7*0.1,0)", "결정세액의 10%"],
+      ["", "", "", ""],
+      ["+", "기납부 소득세 (G907)",     v("G907"),   "월급에서 원천징수된 누계"],
+      ["+", "기납부 지방소득세 (G908)", v("G908"),   "원천징수 지방세 누계"],
+      ["", "", "", ""],
+      ["=", "차감_소득세 (G910)",       "=D7-D10",   "음수면 환급, 양수면 추가 납부"],
+      ["=", "차감_지방소득세 (G911)",   "=D8-D11",   "음수면 환급, 양수면 추가 납부"],
+      ["=", "총 환급(△)/납부 합계",      "=D13+D14", "▶ 통장 입금(또는 출금) 금액"],
+    ];
+    let r = 5;
+    rows.forEach(([sign, name, val, note]) => {
+      if (name === "") { r++; return; }
+      const isResult = (sign === "=");
+      const isFinal  = (sign === "=" && [13,14,15].includes(r));
+      const fill = isFinal ? FINAL_FILL : (isResult ? RESULT_FILL : undefined);
+      const big  = isFinal;
+      const fontC = (typeof val === "number") ? "0000FF" : "000000";
+      setCell(ws, `B${r}`, sign, S({ fill, align:ALIGN_C, border:true, bold:isResult, size: big?13:11 }));
+      setCell(ws, `C${r}`, name, S({ fill, align:ALIGN_L, border:true, bold:isResult, size: big?13:11 }));
+      setCell(ws, `D${r}`, val,  S({ fill, align:ALIGN_R, border:true, bold:isResult, color: isFinal ? "C00000" : fontC, size: big?13:11, fmt:'#,##0;[Red](#,##0)' }));
+      setCell(ws, `E${r}`, note, S({ fill, align:ALIGN_L, border:true, bold:isResult, size: big?13:11 }));
+      r++;
+    });
+    setRange(ws, `A1:E${r}`);
+    XLSX.utils.book_append_sheet(wb, ws, "7.결정·환급");
+  }
+
+  // ---------- Sheet 8: 초과 사용액 분석 ----------
+  {
+    const ws = {};
+    setCols(ws, [4, 6, 40, 22, 50]);
+    setCell(ws, "B2", "STEP 9.  신용카드 초과 사용액 분석", TITLE_STYLE);
+    mergeCells(ws, "B2:E2"); setRowHeight(ws, 2, 28);
+    ["부호","항목","금액(원)","설명"].forEach((h, i) => setCell(ws, `${"BCDE"[i]}4`, h, HEAD_STYLE));
+
+    const totalSalary = v("S030");
+    const cards15 = v("G223") + v("G257");
+    const cards30 = v("G205") + v("G222") + v("G258") + v("G259");
+    const actualG232 = v("G232");
+    const cap = totalSalary <= 70000000 ? 3000000 : 2500000;
+    const capDesc = totalSalary <= 70000000 ? "총급여 7천만원 이하 → 한도 300만원" : "총급여 7천만원 초과 → 한도 250만원";
+    const isCapped = actualG232 >= cap - 10;
+
+    // 사전 계산된 값 (Excel 호환을 위해 수식 대신 숫자값 사용)
+    const threshold25 = Math.round(totalSalary * 0.25);
+    const cardsTotal  = cards15 + cards30;
+    const required    = Math.round(threshold25 + cap / 0.3);
+    const excess      = cardsTotal - required;
+    const scenC       = Math.round(threshold25 * 0.5);
+
+    let r = 5;
+    setCell(ws, `B${r}`, "■ 1. 기준 금액", STEP_STYLE); mergeCells(ws, `B${r}:E${r}`); r++;
+    setCell(ws, `B${r}`, "+", S({ align:ALIGN_C, border:true }));
+    setCell(ws, `C${r}`, "총급여 (S030)", S({ align:ALIGN_L, border:true }));
+    setCell(ws, `D${r}`, totalSalary, S({ align:ALIGN_R, border:true, color:"0000FF", fmt:'#,##0' }));
+    setCell(ws, `E${r}`, "이전 단계 결과 (STEP 1)", S({ align:ALIGN_L, border:true }));
+    r++;
+    setCell(ws, `B${r}`, "×", S({ align:ALIGN_C, border:true, fill:RESULT_FILL }));
+    setCell(ws, `C${r}`, "25% 최저사용액 (문턱)", S({ align:ALIGN_L, border:true, bold:true, fill:RESULT_FILL }));
+    setCell(ws, `D${r}`, threshold25, S({ align:ALIGN_R, border:true, bold:true, color:"0000FF", fmt:'#,##0', fill:RESULT_FILL }));
+    setCell(ws, `E${r}`, "총급여 × 25% — 이 금액 이상 써야 공제 시작", S({ align:ALIGN_L, border:true, fill:RESULT_FILL }));
+    r++;
+    setCell(ws, `B${r}`, "→", S({ align:ALIGN_C, border:true, fill:RESULT_FILL }));
+    setCell(ws, `C${r}`, "적용 공제 한도", S({ align:ALIGN_L, border:true, bold:true, fill:RESULT_FILL }));
+    setCell(ws, `D${r}`, cap, S({ align:ALIGN_R, border:true, bold:true, color:"0000FF", fmt:'#,##0', fill:RESULT_FILL }));
+    setCell(ws, `E${r}`, capDesc, S({ align:ALIGN_L, border:true, fill:RESULT_FILL }));
+    r++;
+
+    r++;
+    setCell(ws, `B${r}`, "■ 2. 일반 카드 사용 내역 (전통시장·대중교통 제외)", STEP_STYLE); mergeCells(ws, `B${r}:E${r}`); r++;
+    setCell(ws, `B${r}`, "+", S({ align:ALIGN_C, border:true }));
+    setCell(ws, `C${r}`, "15% 그룹 (신용카드 + 문화체육 신용카드)", S({ align:ALIGN_L, border:true }));
+    setCell(ws, `D${r}`, cards15, S({ align:ALIGN_R, border:true, color:"0000FF", fmt:'#,##0' }));
+    setCell(ws, `E${r}`, "G223 + G257", S({ align:ALIGN_L, border:true }));
+    r++;
+    setCell(ws, `B${r}`, "+", S({ align:ALIGN_C, border:true }));
+    setCell(ws, `C${r}`, "30% 그룹 (현금영수증·직불·선불 + 문화체육 직불·현금)", S({ align:ALIGN_L, border:true }));
+    setCell(ws, `D${r}`, cards30, S({ align:ALIGN_R, border:true, color:"0000FF", fmt:'#,##0' }));
+    setCell(ws, `E${r}`, "G205 + G222 + G258 + G259", S({ align:ALIGN_L, border:true }));
+    r++;
+    setCell(ws, `B${r}`, "=", S({ align:ALIGN_C, border:true, bold:true, fill:RESULT_FILL, size:12 }));
+    setCell(ws, `C${r}`, "일반 카드 사용 합계", S({ align:ALIGN_L, border:true, bold:true, fill:RESULT_FILL, size:12 }));
+    setCell(ws, `D${r}`, cardsTotal, S({ align:ALIGN_R, border:true, bold:true, color:"0000FF", fmt:'#,##0', fill:RESULT_FILL, size:12 }));
+    setCell(ws, `E${r}`, "한도 분석 대상 금액", S({ align:ALIGN_L, border:true, fill:RESULT_FILL, size:12, bold:true }));
+    r++;
+
+    r++;
+    setCell(ws, `B${r}`, "■ 3. 한도 달성 분석", STEP_STYLE); mergeCells(ws, `B${r}:E${r}`); r++;
+    setCell(ws, `B${r}`, "?", S({ align:ALIGN_C, border:true, fill:FINAL_FILL, bold:true }));
+    setCell(ws, `C${r}`, "한도 달성에 필요한 최소 사용액", S({ align:ALIGN_L, border:true, bold:true, fill:FINAL_FILL, size:12 }));
+    setCell(ws, `D${r}`, required, S({ align:ALIGN_R, border:true, bold:true, color:"0000FF", fmt:'#,##0', fill:FINAL_FILL, size:12 }));
+    setCell(ws, `E${r}`, "→ 25% 문턱  +  (한도 ÷ 한계공제율 30%)", S({ align:ALIGN_L, border:true, fill:FINAL_FILL }));
+    r++;
+    setCell(ws, `B${r}`, "=", S({ align:ALIGN_C, border:true, bold:true, fill:FINAL_FILL, size:13 }));
+    setCell(ws, `C${r}`, "초과 사용액 (세제혜택 없이 더 쓴 금액)", S({ align:ALIGN_L, border:true, bold:true, fill:FINAL_FILL, size:13 }));
+    setCell(ws, `D${r}`, excess, S({ align:ALIGN_R, border:true, bold:true, color:"C00000", fmt:'#,##0;[Red](#,##0)', fill:FINAL_FILL, size:13 }));
+    setCell(ws, `E${r}`,
+      isCapped ? "한도 도달 — 이만큼 줄였어도 동일한 공제" : "한도 미도달 — 더 쓰면 추가 공제 가능",
+      S({ align:ALIGN_L, border:true, fill:FINAL_FILL, size:12, bold:true }));
+    r++;
+
+    r++;
+    setCell(ws, `B${r}`, "■ 참고 — 카드 사용 시나리오 비교", STEP_STYLE); mergeCells(ws, `B${r}:E${r}`); r++;
+    const scenHdr = S({ bold:true, fill:SUB_FILL, align:ALIGN_C, border:true });
+    setCell(ws, `B${r}`, "시나리오", scenHdr); mergeCells(ws, `B${r}:C${r}`);
+    setCell(ws, `D${r}`, "일반 카드 사용 합계", scenHdr);
+    setCell(ws, `E${r}`, "공제 결과", scenHdr);
+    r++;
+    const scenarios = [
+      ["A. 현재 사용 (실제 데이터)", cardsTotal, "한도 도달 (적용 공제 한도와 동일)"],
+      ["B. 한도 달성 최소 사용",      required,   "한도 도달 (동일 공제)"],
+      ["C. 25% 문턱 미만",            scenC,      "공제 없음 (문턱 미달)"],
+    ];
+    scenarios.forEach(([name, amt, result], i) => {
+      const isHighlight = i === 1;
+      const fill = isHighlight ? RESULT_FILL : undefined;
+      setCell(ws, `B${r}`, name, S({ align:ALIGN_L, border:true, bold:isHighlight, fill })); mergeCells(ws, `B${r}:C${r}`);
+      setCell(ws, `D${r}`, amt, S({ align:ALIGN_R, border:true, bold:isHighlight, color:"0000FF", fmt:'#,##0', fill }));
+      setCell(ws, `E${r}`, result, S({ align:ALIGN_L, border:true, bold:isHighlight, fill }));
+      r++;
+    });
+
+    r++;
+    setCell(ws, `B${r}`,
+      "※ 분석 원리 — 25% 문턱까지는 공제율이 낮은 신용카드(15%)부터 흡수되어 공제 기여가 0이 됩니다. " +
+      "문턱을 넘는 사용분만 한계공제율 30%로 누적되어 한도에 도달합니다. " +
+      "전통시장·대중교통은 각각 별도 100만원 한도가 있어 본 분석에서는 제외했습니다. " +
+      "※ 이 시트의 값은 변환 시점의 계산 결과이며 동적 수식이 아닙니다 — 다른 입력값으로 보려면 새 파일을 업로드해 주세요.",
+      S({ italic:true, size:10, color:"555555", align:{ horizontal:"left", vertical:"center", wrapText:true } }));
+    mergeCells(ws, `B${r}:E${r}`); setRowHeight(ws, r, 70);
+
+    setRange(ws, `A1:E${r}`);
+    XLSX.utils.book_append_sheet(wb, ws, "8.초과사용액분석");
+  }
+
+  return wb;
+}
+
+// ============================================================
+//  UI 와이어업
+// ============================================================
+const dropzone    = document.getElementById("dropzone");
+const fileInput   = document.getElementById("fileInput");
+const filename    = document.getElementById("filename");
+const processBtn  = document.getElementById("processBtn");
+const downloadBtn = document.getElementById("downloadBtn");
+const resetBtn    = document.getElementById("resetBtn");
+const status      = document.getElementById("status");
+const preview     = document.getElementById("preview");
+const previewTbl  = document.getElementById("previewTable");
+
+let currentFile  = null;
+let generatedWb  = null;
+let outFileName  = "";
+let extracted    = null;
+
+function showStatus(type, html) {
+  status.className = `status ${type} show`;
+  status.innerHTML = html;
+}
+function clearStatus() { status.className = "status"; }
+
+function setFile(f) {
+  currentFile = f;
+  generatedWb = null;
+  downloadBtn.disabled = true;
+  if (!f) {
+    filename.classList.remove("show");
+    processBtn.disabled = true;
+    return;
+  }
+  filename.textContent = `📎 ${f.name}  (${(f.size/1024).toFixed(1)} KB)`;
+  filename.classList.add("show");
+  processBtn.disabled = false;
+  clearStatus();
+  preview.classList.remove("show");
+}
+
+fileInput.addEventListener("change", (e) => {
+  if (e.target.files[0]) setFile(e.target.files[0]);
+});
+["dragover", "dragenter"].forEach(ev =>
+  dropzone.addEventListener(ev, e => { e.preventDefault(); dropzone.classList.add("drag"); })
+);
+["dragleave", "drop"].forEach(ev =>
+  dropzone.addEventListener(ev, e => { e.preventDefault(); dropzone.classList.remove("drag"); })
+);
+dropzone.addEventListener("drop", (e) => {
+  const f = e.dataTransfer.files[0];
+  if (f) { fileInput.files = e.dataTransfer.files; setFile(f); }
+});
+
+resetBtn.addEventListener("click", () => {
+  fileInput.value = "";
+  setFile(null);
+  clearStatus();
+  preview.classList.remove("show");
+  generatedWb = null; extracted = null; outFileName = "";
+  downloadBtn.disabled = true;
+});
+
+processBtn.addEventListener("click", async () => {
+  if (!currentFile) return;
+  processBtn.disabled = true;
+  downloadBtn.disabled = true;
+  generatedWb = null;
+  showStatus("info", "🔄 파일을 읽고 변환 중…");
+
+  try {
+    const buf = await currentFile.arrayBuffer();
+    const wbIn = XLSX.read(buf, { type: "array" });
+    extracted = parseInput(wbIn);
+
+    const preview_keys = [
+      ["S001", "급여소득"],
+      ["S002", "상여소득"],
+      ["S030", "총급여액"],
+      ["G001", "근로소득공제"],
+      ["S301", "근로소득"],
+      ["G211", "과세표준"],
+      ["G212", "산출세액"],
+      ["G232", "신용카드등공제액 (한도적용)"],
+      ["G309", "세액공제 합계"],
+      ["G901", "결정세액(소득세)"],
+      ["G910", "차감_소득세(환급/납부)"],
+      ["G911", "차감_지방소득세"],
+    ];
+    let html = "<tr><th>코드</th><th>항목</th><th style='text-align:right'>금액(원)</th></tr>";
+    preview_keys.forEach(([code, name]) => {
+      const val = extracted[code];
+      const cls = (typeof val === "number" && val < 0) ? "num neg" : "num";
+      const display = (typeof val === "number") ? val.toLocaleString() : "—";
+      html += `<tr><td>${code}</td><td>${name}</td><td class="${cls}">${display}</td></tr>`;
+    });
+    previewTbl.innerHTML = html;
+    preview.classList.add("show");
+
+    showStatus("info", "📝 9개 시트 재구성 중…");
+    generatedWb = buildOutput(extracted);
+    outFileName = currentFile.name.replace(/\.[^.]+$/, "") + "_계산흐름재구성.xlsx";
+
+    showStatus("ok",
+      `✅ 변환 완료! 아래에서 추출된 주요 항목을 확인하신 후 <b>📥 결과 파일 다운로드</b> 버튼을 눌러 ` +
+      `<b>${outFileName}</b> 파일을 받으세요.<br>` +
+      `9개 시트(한눈에보기 → 환급 → 초과사용액분석)로 정리되어 있습니다.`);
+    downloadBtn.disabled = false;
+  } catch (err) {
+    console.error(err);
+    showStatus("err", `❌ 처리 중 오류가 발생했습니다.<br><code>${err.message}</code>`);
+  } finally {
+    processBtn.disabled = false;
+  }
+});
+
+downloadBtn.addEventListener("click", () => {
+  if (!generatedWb || !outFileName) return;
+  try {
+    XLSX.writeFile(generatedWb, outFileName);
+    showStatus("ok", `📥 <b>${outFileName}</b> 파일이 다운로드 폴더에 저장되었습니다.`);
+  } catch (err) {
+    console.error(err);
+    showStatus("err", `❌ 다운로드 중 오류: <code>${err.message}</code>`);
+  }
+});
+</script>
+</body>
+</html>
