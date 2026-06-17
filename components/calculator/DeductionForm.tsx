@@ -41,7 +41,7 @@ export default function DeductionForm({ input, result, onChange }: Props) {
       <h3>기타 소득공제</h3>
       <NumberField code="G218" label="벤처투자조합 출자공제" value={input.G218} onChange={(v) => onChange({ G218: v })} />
       <NumberField code="G219" label="소기업·소상공인 공제부금" value={input.G219} onChange={(v) => onChange({ G219: v })} />
-      <NumberField code="G113" label="주택임차차입금 원리금 상환액" value={input.G113} onChange={(v) => onChange({ G113: v })} />
+      <NumberField code="G113" label="주택임차차입금 원리금 상환액" value={input.housingLoan} onChange={(v) => onChange({ housingLoan: v })} />
       <NumberField code="G115" label="장기주택저당차입금 이자상환액" value={input.G115} onChange={(v) => onChange({ G115: v })} />
 
       <ReadOnlyField code="G211" label="과세표준 (자동계산)" value={result.taxBase} highlight />

@@ -2,22 +2,26 @@
 // DOM 대신 SettlementInput 객체를 입력으로 받는다.
 
 export interface SettlementInput {
+  // ── 소득 ──
   S001: number; // 급여소득
   S002: number; // 상여소득
   S013: number; // 자가운전보조금 비과세
   nontaxEtc: number; // 기타 비과세
 
+  // ── 인적공제 ──
   G004: number; // 부양가족공제
   G007: number; // 경로우대공제
   G008: number; // 장애인공제
   G009: number; // 부녀자공제
   G010: number; // 한부모공제
 
+  // ── 사회보험료 ──
   G015: number; // 국민연금
   G111: number; // 건강보험료
   G154: number; // 장기요양보험료
   G112: number; // 고용보험료
 
+  // ── 신용카드 등 ──
   G223: number; // 신용카드
   G205: number; // 현금영수증
   G222: number; // 직불·체크카드
@@ -25,19 +29,24 @@ export interface SettlementInput {
   G228: number; // 전통시장
   G240: number; // 대중교통
 
+  // ── 기타 소득공제 ──
   G218: number; // 벤처투자조합 출자공제
   G219: number; // 소기업·소상공인 공제부금
-  G113: number; // 주택임차차입금 원리금상환액
+  housingLoan: number; // 주택임차차입금 원리금상환액 (구 G113)
   G115: number; // 장기주택저당차입금 이자상환액
 
-  G312: number; // 자녀세액공제
-  G317: number; // 보장성보험료 세액공제
-  G319: number; // 교육비 세액공제
-  G322: number; // 기부금 세액공제
-  G315: number; // 퇴직연금(DC) 세액공제
-  G316: number; // 연금저축 세액공제
-  G318: number; // 의료비 세액공제
+  // ── 세액공제 — 자녀 ──
+  G312: number; // 자녀세액공제 (직접입력 또는 Excel G312)
 
+  // ── 세액공제 — 대상금액(납입액/지출액) ──
+  G113: number;   // 보장성보험 납입액  → insCredit 자동계산
+  medBase: number; // 의료비 지출액      → medCredit 자동계산
+  eduBase: number; // 교육비 지출액      → eduCredit 자동계산
+  donBase: number; // 기부금 지출액      → donCredit 자동계산
+  retBase: number; // 퇴직연금(DC) 납입액 → retCredit 자동계산
+  penBase: number; // 연금저축 납입액    → penCredit 자동계산
+
+  // ── 기납부세액 ──
   G907: number; // 기납부 소득세
   G908: number; // 기납부 지방소득세
 }
@@ -93,12 +102,13 @@ export interface SettlementResult {
   calcTax: number;
   laborCredit: number;
   childCredit: number;
-  insCredit: number;
-  eduCredit: number;
-  donCredit: number;
-  retCredit: number;
-  penCredit: number;
-  medCredit: number;
+  // 세액공제 계산된 금액
+  insCredit: number;   // 보장성보험 세액공제
+  medCredit: number;   // 의료비 세액공제
+  eduCredit: number;   // 교육비 세액공제
+  donCredit: number;   // 기부금 세액공제
+  retCredit: number;   // 퇴직연금 세액공제
+  penCredit: number;   // 연금저축 세액공제
   totalCredit: number;
   finalIncomeTax: number;
   finalLocalTax: number;
@@ -204,6 +214,45 @@ export function calcCardDeduction(totalSalary: number, input: SettlementInput): 
 }
 
 // ===================================================================
+//  세액공제 개별 계산
+// ===================================================================
+
+// 보장성보험: 납입액 × 12%, 납입액 한도 100만원
+export function calcInsCredit(insPremium: number): number {
+  return Math.round(Math.min(insPremium, 1_000_000) * 0.12);
+}
+
+// 의료비: (지출액 - 총급여 × 3%) × 15%, 음수 시 0
+export function calcMedCredit(medSpending: number, totalSalary: number): number {
+  return Math.round(Math.max(0, medSpending - totalSalary * 0.03) * 0.15);
+}
+
+// 교육비: 지출액 × 15%
+export function calcEduCredit(eduSpending: number): number {
+  return Math.round(eduSpending * 0.15);
+}
+
+// 기부금: 1천만 이하 15%, 1천만 초과분 30%
+export function calcDonCredit(donation: number): number {
+  const base = Math.min(donation, 10_000_000) * 0.15;
+  const excess = Math.max(0, donation - 10_000_000) * 0.30;
+  return Math.round(base + excess);
+}
+
+// 연금저축 + 퇴직연금(DC) 통합 계산
+// - 총급여 5,500만 이하: 15%, 초과: 12%
+// - 연금저축 한도: 600만, 합산 한도: 900만
+export function calcPensionCredits(retBase: number, penBase: number, totalSalary: number): { retCredit: number; penCredit: number } {
+  const rate = totalSalary <= 55_000_000 ? 0.15 : 0.12;
+  const penCapped = Math.min(penBase, 6_000_000);
+  const retCapped = Math.min(retBase, Math.max(0, 9_000_000 - penCapped));
+  return {
+    penCredit: Math.round(penCapped * rate),
+    retCredit: Math.round(retCapped * rate),
+  };
+}
+
+// ===================================================================
 //  전체 계산
 // ===================================================================
 export function calcSettlement(input: SettlementInput): SettlementResult {
@@ -235,7 +284,7 @@ export function calcSettlement(input: SettlementInput): SettlementResult {
 
   const venture = input.G218;
   const smallbiz = input.G219;
-  const rentLoan = input.G113;
+  const rentLoan = input.housingLoan;
   const mtgInt = input.G115;
   const otherDed = venture + smallbiz + card.total + rentLoan + mtgInt;
 
@@ -246,13 +295,13 @@ export function calcSettlement(input: SettlementInput): SettlementResult {
 
   const laborCredit = calcLaborTaxCredit(calcTax, totalSalary);
   const childCredit = input.G312;
-  const insCredit = input.G317;
-  const eduCredit = input.G319;
-  const donCredit = input.G322;
-  const retCredit = input.G315;
-  const penCredit = input.G316;
-  const medCredit = input.G318;
-  const totalCredit = laborCredit + childCredit + insCredit + eduCredit + donCredit + retCredit + penCredit + medCredit;
+  const insCredit = calcInsCredit(input.G113);
+  const medCredit = calcMedCredit(input.medBase, totalSalary);
+  const eduCredit = calcEduCredit(input.eduBase);
+  const donCredit = calcDonCredit(input.donBase);
+  const { retCredit, penCredit } = calcPensionCredits(input.retBase, input.penBase, totalSalary);
+
+  const totalCredit = laborCredit + childCredit + insCredit + medCredit + eduCredit + donCredit + retCredit + penCredit;
 
   const finalIncomeTax = Math.max(calcTax - totalCredit, 0);
   const finalLocalTax = Math.round(finalIncomeTax * 0.1);
@@ -271,7 +320,7 @@ export function calcSettlement(input: SettlementInput): SettlementResult {
     venture, smallbiz, rentLoan, mtgInt, otherDed,
     totalDeduction, taxBase,
     calcTax,
-    laborCredit, childCredit, insCredit, eduCredit, donCredit, retCredit, penCredit, medCredit, totalCredit,
+    laborCredit, childCredit, insCredit, medCredit, eduCredit, donCredit, retCredit, penCredit, totalCredit,
     finalIncomeTax, finalLocalTax,
     withheldIncome, withheldLocal,
     diffIncome, diffLocal, totalDiff,
