@@ -847,6 +847,14 @@ a {
   border-bottom: none;
 }
 
+.credit-pair--multi {
+  align-items: start;
+}
+
+.credit-pair--multi .credit-pair-arrow {
+  padding-top: 14px;
+}
+
 /* 입력 힌트 (작은 글씨) */
 .field-hint {
   display: block;

@@ -39,12 +39,14 @@ export interface SettlementInput {
   G312: number; // 자녀세액공제 (직접입력 또는 Excel G312)
 
   // ── 세액공제 — 대상금액(납입액/지출액) ──
-  G113: number;   // 보장성보험 납입액  → insCredit 자동계산
-  medBase: number; // 의료비 지출액      → medCredit 자동계산
-  eduBase: number; // 교육비 지출액      → eduCredit 자동계산
-  donBase: number; // 기부금 지출액      → donCredit 자동계산
-  retBase: number; // 퇴직연금(DC) 납입액 → retCredit 자동계산
-  penBase: number; // 연금저축 납입액    → penCredit 자동계산
+  G113: number;  // 보장성보험 납입액              → insCredit 자동계산
+  G118: number;  // 의료비 (일반)                  ⎫
+  G198: number;  // 의료비 (난임시술비)             ⎬ 합산 → medCredit 자동계산
+  G199: number;  // 의료비 (미숙아·선천성이상아)    ⎭
+  G123: number;  // 교육비 지출액                  → eduCredit 자동계산
+  G326: number;  // 기부금 지출액                  → donCredit 자동계산
+  G167: number;  // 퇴직연금(DC) 납입액            → retCredit 자동계산
+  G202: number;  // 연금저축 납입액                → penCredit 자동계산
 
   // ── 기납부세액 ──
   G907: number; // 기납부 소득세
@@ -296,10 +298,10 @@ export function calcSettlement(input: SettlementInput): SettlementResult {
   const laborCredit = calcLaborTaxCredit(calcTax, totalSalary);
   const childCredit = input.G312;
   const insCredit = calcInsCredit(input.G113);
-  const medCredit = calcMedCredit(input.medBase, totalSalary);
-  const eduCredit = calcEduCredit(input.eduBase);
-  const donCredit = calcDonCredit(input.donBase);
-  const { retCredit, penCredit } = calcPensionCredits(input.retBase, input.penBase, totalSalary);
+  const medCredit = calcMedCredit(input.G118 + input.G198 + input.G199, totalSalary);
+  const eduCredit = calcEduCredit(input.G123);
+  const donCredit = calcDonCredit(input.G326);
+  const { retCredit, penCredit } = calcPensionCredits(input.G167, input.G202, totalSalary);
 
   const totalCredit = laborCredit + childCredit + insCredit + medCredit + eduCredit + donCredit + retCredit + penCredit;
 

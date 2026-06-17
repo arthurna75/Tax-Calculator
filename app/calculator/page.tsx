@@ -18,7 +18,7 @@ const DEFAULT_INPUT: SettlementInput = {
   G223: 0, G205: 0, G222: 0, G257: 0, G228: 0, G240: 0,
   G218: 0, G219: 0, housingLoan: 0, G115: 0,
   G312: 0,
-  G113: 0, medBase: 0, eduBase: 0, donBase: 0, retBase: 0, penBase: 0,
+  G113: 0, G118: 0, G198: 0, G199: 0, G123: 0, G326: 0, G167: 0, G202: 0,
   G907: 0, G908: 0,
 };
 

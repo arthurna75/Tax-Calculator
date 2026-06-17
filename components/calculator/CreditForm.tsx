@@ -10,11 +10,10 @@ interface Props {
   onChange: (patch: Partial<SettlementInput>) => void;
 }
 
-// 대상금액 → 세액공제금액 쌍을 한 행으로 보여주는 헬퍼
+// 단일 대상금액 → 세액공제금액 쌍
 function CreditPair({
   baseCode, baseLabel, baseValue, onBaseChange,
-  creditCode, creditLabel, creditValue,
-  hint,
+  creditCode, creditLabel, creditValue, hint,
 }: {
   baseCode: string; baseLabel: string; baseValue: number; onBaseChange: (v: number) => void;
   creditCode: string; creditLabel: string; creditValue: number;
@@ -48,7 +47,7 @@ export default function CreditForm({ input, result, onChange }: Props) {
         onChange={(v) => onChange({ G312: v })}
       />
 
-      <h3>보험료·의료비·교육비·기부금</h3>
+      <h3>보험료</h3>
       <CreditPair
         baseCode="G113" baseLabel="보장성보험 납입액"
         baseValue={input.G113} onBaseChange={(v) => onChange({ G113: v })}
@@ -56,38 +55,48 @@ export default function CreditForm({ input, result, onChange }: Props) {
         creditValue={result.insCredit}
         hint="납입액 한도 100만원 · 공제율 12%"
       />
+
+      <h3>의료비</h3>
+      <div className="credit-pair credit-pair--multi">
+        <div className="credit-pair-base">
+          <NumberField code="G118" label="의료비 (일반)" value={input.G118} onChange={(v) => onChange({ G118: v })} />
+          <NumberField code="G198" label="의료비 (난임시술비)" value={input.G198} onChange={(v) => onChange({ G198: v })} />
+          <NumberField code="G199" label="의료비 (미숙아·선천성이상아)" value={input.G199} onChange={(v) => onChange({ G199: v })} />
+        </div>
+        <div className="credit-pair-arrow">→</div>
+        <div className="credit-pair-result">
+          <ReadOnlyField code="G318" label="의료비 세액공제 ((합산 - 총급여×3%)×15%)" value={result.medCredit} highlight />
+        </div>
+      </div>
+
+      <h3>교육비</h3>
       <CreditPair
-        baseCode="medBase" baseLabel="의료비 지출액"
-        baseValue={input.medBase} onBaseChange={(v) => onChange({ medBase: v })}
-        creditCode="G318" creditLabel="의료비 세액공제 ((지출액 - 총급여×3%)×15%)"
-        creditValue={result.medCredit}
-        hint="총급여의 3% 초과분부터 적용"
-      />
-      <CreditPair
-        baseCode="eduBase" baseLabel="교육비 지출액"
-        baseValue={input.eduBase} onBaseChange={(v) => onChange({ eduBase: v })}
+        baseCode="G123" baseLabel="교육비 지출액"
+        baseValue={input.G123} onBaseChange={(v) => onChange({ G123: v })}
         creditCode="G319" creditLabel="교육비 세액공제 (지출액×15%)"
         creditValue={result.eduCredit}
         hint="본인 전액, 부양가족 1인당 한도 있음"
       />
+
+      <h3>기부금</h3>
       <CreditPair
-        baseCode="donBase" baseLabel="기부금 지출액"
-        baseValue={input.donBase} onBaseChange={(v) => onChange({ donBase: v })}
+        baseCode="G326" baseLabel="기부금 지출액"
+        baseValue={input.G326} onBaseChange={(v) => onChange({ G326: v })}
         creditCode="G322" creditLabel="기부금 세액공제 (1천만 이하 15%, 초과 30%)"
         creditValue={result.donCredit}
       />
 
       <h3>연금·퇴직연금</h3>
       <CreditPair
-        baseCode="penBase" baseLabel="연금저축 납입액"
-        baseValue={input.penBase} onBaseChange={(v) => onChange({ penBase: v })}
+        baseCode="G202" baseLabel="연금저축 납입액"
+        baseValue={input.G202} onBaseChange={(v) => onChange({ G202: v })}
         creditCode="G316" creditLabel="연금저축 세액공제 (총급여 5,500만 이하 15%, 초과 12%)"
         creditValue={result.penCredit}
         hint="납입액 한도 600만원, 퇴직연금 합산 900만원"
       />
       <CreditPair
-        baseCode="retBase" baseLabel="퇴직연금(DC) 추가납입액"
-        baseValue={input.retBase} onBaseChange={(v) => onChange({ retBase: v })}
+        baseCode="G167" baseLabel="퇴직연금(DC) 추가납입액"
+        baseValue={input.G167} onBaseChange={(v) => onChange({ G167: v })}
         creditCode="G315" creditLabel="퇴직연금 세액공제 (연금저축과 합산 900만 한도)"
         creditValue={result.retCredit}
         hint="연금저축과 합산 900만원 한도"
