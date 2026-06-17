@@ -960,6 +960,76 @@ a {
 .record-modal-title { font-weight: 600; font-size: 14px; }
 .record-modal-meta { font-size: 12px; color: #888; }
 
+/* ── 엑셀 업로드 상세 결과 ── */
+.upload-detail {
+  margin-top: 10px;
+}
+
+.upload-detail-toggle {
+  background: none;
+  border: none;
+  color: var(--blue-dark, #1f4e78);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 4px 0;
+}
+.upload-detail-toggle:hover { text-decoration: underline; }
+
+.upload-detail-body {
+  margin-top: 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.upload-detail-section-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: #2c7a4b;
+  background: #f0faf4;
+  padding: 6px 12px;
+  margin: 0;
+  border-bottom: 1px solid #e2e8f0;
+}
+.upload-detail-section-title--pending {
+  color: #7a6500;
+  background: #fffbea;
+}
+
+.upload-detail-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.upload-detail-table th {
+  background: #f8fafb;
+  padding: 5px 10px;
+  text-align: left;
+  font-weight: 600;
+  color: #555;
+  border-bottom: 1px solid #e2e8f0;
+}
+.upload-detail-table td {
+  padding: 5px 10px;
+  border-bottom: 1px solid #f0f2f5;
+  vertical-align: middle;
+}
+.upload-detail-table--pending td { color: #888; }
+
+.upload-detail-row--matched td:first-child { color: var(--blue-dark, #1f4e78); font-weight: 600; }
+.upload-detail-row--pending td:first-child { color: #999; font-weight: 600; }
+
+.upload-detail-pending-label {
+  font-style: italic;
+  color: #aaa !important;
+}
+
+.upload-detail-amount {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
 @media (max-width: 700px) {
   .credit-pair {
     grid-template-columns: 1fr;

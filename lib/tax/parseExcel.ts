@@ -23,9 +23,9 @@ const CODE_TO_INPUT: Partial<Record<string, keyof SettlementInput>> = {
   G240: "G240",
   G218: "G218",
   G219: "G219",
-  G113: "G113",  // 보장성보험 납입액
   G115: "G115",
   G312: "G312",
+  G113: "G113",  // 보장성보험 납입액
   G118: "G118",  // 의료비 (일반)
   G198: "G198",  // 의료비 (난임시술비)
   G199: "G199",  // 의료비 (미숙아·선천성이상아)
@@ -33,53 +33,149 @@ const CODE_TO_INPUT: Partial<Record<string, keyof SettlementInput>> = {
   G326: "G326",  // 기부금 지출액
   G167: "G167",  // 퇴직연금(DC) 납입액
   G202: "G202",  // 연금저축 납입액
-  // G317/G318/G319/G322/G315/G316은 대상금액에서 자동계산되므로 직접 매핑하지 않음
   G907: "G907",
   G908: "G908",
 };
+
+// 코드 → 한국어 항목명 (업로드 결과 표시용)
+export const CODE_NAMES: Readonly<Record<string, string>> = {
+  S001: "급여소득",
+  S002: "상여소득",
+  S013: "자가운전보조금 비과세",
+  G004: "부양가족 공제액",
+  G007: "경로우대 추가공제",
+  G008: "장애인 추가공제",
+  G009: "부녀자공제",
+  G010: "한부모 추가공제",
+  G015: "국민연금보험료",
+  G111: "건강보험료",
+  G154: "장기요양보험료",
+  G112: "고용보험료",
+  G223: "신용카드 사용액",
+  G205: "현금영수증 사용액",
+  G222: "직불·체크카드 사용액",
+  G257: "도서·공연·문화 신용카드",
+  G228: "전통시장 사용액",
+  G240: "대중교통 사용액",
+  G218: "벤처투자조합 출자공제",
+  G219: "소기업·소상공인 공제부금",
+  G115: "장기주택저당차입금 이자상환액",
+  G312: "자녀세액공제",
+  G113: "보장성보험 납입액",
+  G118: "의료비 (일반)",
+  G198: "의료비 (난임시술비)",
+  G199: "의료비 (미숙아·선천성이상아)",
+  G123: "교육비 지출액",
+  G326: "기부금 지출액",
+  G167: "퇴직연금(DC) 납입액",
+  G202: "연금저축 납입액",
+  G907: "기납부 소득세",
+  G908: "기납부 지방소득세",
+};
+
+const KNOWN_CODES = new Set(Object.keys(CODE_TO_INPUT));
+
+export interface MatchedItem { code: string; name: string; value: number; }
+export interface UnmatchedItem { code: string; value: number; }
 
 export interface ParseResult {
   input: Partial<SettlementInput>;
   matched: number;
   total: number;
+  matchedItems: MatchedItem[];
+  unmatchedItems: UnmatchedItem[];
 }
 
-// 알려진 정산항목코드 집합 (컬럼 자동감지용)
-const KNOWN_CODES = new Set(Object.keys(CODE_TO_INPUT));
+// 숫자 파싱 헬퍼
+function parseNum(raw: string | number | null | undefined): number {
+  if (raw === null || raw === undefined || raw === "") return 0;
+  if (typeof raw === "number") return raw;
+  return Number(raw.replace(/,/g, "")) || 0;
+}
 
-function extractCodesFromSheet(
+// 시트에서 코드/값 열 위치를 감지해 반환 (없으면 null)
+function detectColumns(
+  rows: (string | number | null)[][]
+): { cCol: number; vCol: number; dataStart: number } | null {
+  // ── 방법 1: 헤더 텍스트("정산항목코드" / "처리금액") 탐색 ──
+  for (let r = 0; r < Math.min(rows.length, 20); r++) {
+    const row = rows[r] || [];
+    let cCol = -1, vCol = -1;
+    for (let c = 0; c < row.length; c++) {
+      const v = String(row[c] ?? "").trim();
+      if (v === "정산항목코드") cCol = c;
+      if (v === "처리금액") vCol = c;
+    }
+    if (cCol >= 0 && vCol >= 0) return { cCol, vCol, dataStart: r + 1 };
+  }
+
+  // ── 방법 2: B열(1) = 코드, G열(6) = 처리금액 고정 컬럼 ──
+  for (let r = 0; r < rows.length; r++) {
+    const code = String((rows[r] || [])[1] ?? "").trim();
+    if (KNOWN_CODES.has(code)) return { cCol: 1, vCol: 6, dataStart: r };
+  }
+
+  // ── 방법 3: 어느 열이든 알려진 코드 발견 → 오른쪽 숫자열 추론 ──
+  for (let r = 0; r < Math.min(rows.length, 30); r++) {
+    const row = rows[r] || [];
+    for (let c = 0; c < row.length; c++) {
+      if (!KNOWN_CODES.has(String(row[c] ?? "").trim())) continue;
+      for (let vc = c + 1; vc < Math.min(c + 8, row.length); vc++) {
+        const cell = row[vc];
+        if (
+          typeof cell === "number" ||
+          (typeof cell === "string" && /^[\d,]+$/.test(cell.trim()))
+        ) {
+          return { cCol: c, vCol: vc, dataStart: r };
+        }
+      }
+    }
+  }
+
+  return null;
+}
+
+// 감지된 열로 시트 전체를 파싱
+function parseSheet(
   rows: (string | number | null)[][],
   cCol: number,
   vCol: number,
-  dataStartRow: number
-): { partial: Partial<SettlementInput>; matched: number; total: number } {
+  dataStart: number,
+  seenCodes: Set<string>  // 이미 다른 시트에서 처리된 코드는 건너뜀
+): { partial: Partial<SettlementInput>; matchedItems: MatchedItem[]; unmatchedItems: UnmatchedItem[] } {
   const partial: Partial<SettlementInput> = {};
-  let matched = 0;
-  let total = 0;
+  const matchedItems: MatchedItem[] = [];
+  const unmatchedItems: UnmatchedItem[] = [];
 
-  for (let r = dataStartRow; r < rows.length; r++) {
+  for (let r = dataStart; r < rows.length; r++) {
     const row = rows[r] || [];
     const code = String(row[cCol] ?? "").trim();
     if (!code) continue;
+    if (seenCodes.has(code)) continue;  // 이전 시트에서 이미 처리
 
-    let rawVal = row[vCol];
-    if (rawVal === null || rawVal === undefined || rawVal === "") rawVal = 0;
-    if (typeof rawVal === "string") rawVal = Number(rawVal.replace(/,/g, "")) || 0;
-    const val = Number(rawVal);
+    const val = parseNum(row[vCol]);
 
-    total++;
     const key = CODE_TO_INPUT[code];
     if (key) {
       (partial as Record<string, number>)[key] =
         ((partial as Record<string, number>)[key] ?? 0) + val;
-      matched++;
+      matchedItems.push({ code, name: CODE_NAMES[code] ?? code, value: val });
+    } else {
+      unmatchedItems.push({ code, value: val });
     }
+    seenCodes.add(code);
   }
-  return { partial, matched, total };
+
+  return { partial, matchedItems, unmatchedItems };
 }
 
 export function parseExcelBuffer(buffer: ArrayBuffer): ParseResult {
   const wb = XLSX.read(buffer, { type: "array" });
+
+  const accPartial: Partial<SettlementInput> = {};
+  const accMatched: MatchedItem[] = [];
+  const accUnmatched: UnmatchedItem[] = [];
+  const seenCodes = new Set<string>();
 
   for (const sn of wb.SheetNames) {
     const ws = wb.Sheets[sn];
@@ -89,72 +185,41 @@ export function parseExcelBuffer(buffer: ArrayBuffer): ParseResult {
     });
     if (!rows.length) continue;
 
-    // ── 방법 1: 헤더 텍스트("정산항목코드" / "처리금액")로 열 탐색 (최초 15행) ──
-    let hRow = -1, cCol = -1, vCol = -1;
-    for (let r = 0; r < Math.min(rows.length, 15); r++) {
-      const row = rows[r] || [];
-      for (let c = 0; c < row.length; c++) {
-        const v = String(row[c] ?? "").trim();
-        if (v === "정산항목코드") { cCol = c; hRow = r; }
-        if (v === "처리금액")     { vCol = c; }
-      }
-      if (hRow >= 0 && cCol >= 0 && vCol >= 0) break;
-    }
+    const cols = detectColumns(rows);
+    if (!cols) continue;
 
-    if (hRow >= 0 && cCol >= 0 && vCol >= 0) {
-      const { partial, matched, total } = extractCodesFromSheet(rows, cCol, vCol, hRow + 1);
-      if (total > 0) return { input: partial, matched, total };
-    }
+    const { partial, matchedItems, unmatchedItems } = parseSheet(
+      rows,
+      cols.cCol,
+      cols.vCol,
+      cols.dataStart,
+      seenCodes
+    );
 
-    // ── 방법 2: B열(index 1) = 코드, G열(index 6) = 처리금액 고정 컬럼 시도 ──
-    // 헤더 없이 데이터가 바로 시작하는 경우, 또는 헤더가 다른 텍스트인 경우
-    {
-      const B_COL = 1; // B열
-      const G_COL = 6; // G열
-      // B열에 알려진 코드가 있는 첫 행을 데이터 시작점으로 결정
-      let dataStart = -1;
-      for (let r = 0; r < rows.length; r++) {
-        const code = String((rows[r] || [])[B_COL] ?? "").trim();
-        if (KNOWN_CODES.has(code)) { dataStart = r; break; }
-      }
-      if (dataStart >= 0) {
-        const { partial, matched, total } = extractCodesFromSheet(rows, B_COL, G_COL, dataStart);
-        if (total > 0) return { input: partial, matched, total };
+    // 합산 (첫 번째로 발견된 시트의 값 우선)
+    for (const [key, val] of Object.entries(partial)) {
+      if (!((key as keyof SettlementInput) in accPartial)) {
+        (accPartial as Record<string, number>)[key] = val as number;
       }
     }
-
-    // ── 방법 3: 어느 열이든 알려진 코드가 있는 열을 코드열로, 오른쪽 수치열을 값열로 추론 ──
-    {
-      let detectedCCol = -1, detectedVCol = -1, detectedStart = -1;
-      outer:
-      for (let r = 0; r < Math.min(rows.length, 20); r++) {
-        const row = rows[r] || [];
-        for (let c = 0; c < row.length; c++) {
-          const code = String(row[c] ?? "").trim();
-          if (!KNOWN_CODES.has(code)) continue;
-          // 코드열 발견 → 같은 행에서 오른쪽에 숫자인 열 탐색
-          for (let vc = c + 1; vc < Math.min(c + 8, row.length); vc++) {
-            const candidate = row[vc];
-            if (typeof candidate === "number" || (typeof candidate === "string" && /^[\d,]+$/.test(candidate.trim()))) {
-              detectedCCol = c;
-              detectedVCol = vc;
-              detectedStart = r;
-              break outer;
-            }
-          }
-        }
-      }
-      if (detectedCCol >= 0 && detectedVCol >= 0) {
-        const { partial, matched, total } = extractCodesFromSheet(rows, detectedCCol, detectedVCol, detectedStart);
-        if (total > 0) return { input: partial, matched, total };
-      }
-    }
+    accMatched.push(...matchedItems);
+    accUnmatched.push(...unmatchedItems);
   }
 
-  throw new Error(
-    "'정산항목코드' 또는 '처리금액' 열을 찾을 수 없습니다.\n" +
-    "• 헤더 행에 '정산항목코드' / '처리금액' 텍스트가 있는지 확인\n" +
-    "• 또는 B열에 코드(S001, G112 등), G열에 금액이 있는 형식인지 확인\n" +
-    "• DRM(암호화) 보호 파일은 지원하지 않습니다."
-  );
+  if (accMatched.length === 0 && accUnmatched.length === 0) {
+    throw new Error(
+      "'정산항목코드' 또는 '처리금액' 열을 찾을 수 없습니다.\n" +
+      "• 헤더 행에 '정산항목코드' / '처리금액' 텍스트가 있는지 확인\n" +
+      "• 또는 B열에 코드(S001, G112 등), G열에 금액이 있는 형식인지 확인\n" +
+      "• DRM(암호화) 보호 파일은 지원하지 않습니다."
+    );
+  }
+
+  return {
+    input: accPartial,
+    matched: accMatched.length,
+    total: accMatched.length + accUnmatched.length,
+    matchedItems: accMatched,
+    unmatchedItems: accUnmatched,
+  };
 }
