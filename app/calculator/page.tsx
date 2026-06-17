@@ -9,6 +9,7 @@ import IncomeForm from "@/components/calculator/IncomeForm";
 import DeductionForm from "@/components/calculator/DeductionForm";
 import CreditForm from "@/components/calculator/CreditForm";
 import ResultSteps from "@/components/calculator/ResultSteps";
+import ExcelUpload from "@/components/calculator/ExcelUpload";
 
 const DEFAULT_INPUT: SettlementInput = {
   S001: 0, S002: 0, S013: 0, nontaxEtc: 0,
@@ -31,6 +32,14 @@ export default function CalculatorPage() {
     setInput((prev) => ({ ...prev, ...p }));
   }
 
+  function handleExcelLoaded(partial: Partial<SettlementInput>) {
+    setInput({ ...DEFAULT_INPUT, ...partial });
+  }
+
+  function handleReset() {
+    setInput(DEFAULT_INPUT);
+  }
+
   async function handleSave() {
     const title = window.prompt("저장할 기록의 제목을 입력하세요.", "2025년 연말정산");
     if (!title) return;
@@ -48,6 +57,7 @@ export default function CalculatorPage() {
   return (
     <div className="calculator-page">
       <div className="calculator-forms">
+        <ExcelUpload onLoaded={handleExcelLoaded} onReset={handleReset} />
         <IncomeForm input={input} result={result} onChange={patch} />
         <DeductionForm input={input} result={result} onChange={patch} />
         <CreditForm input={input} result={result} onChange={patch} />
