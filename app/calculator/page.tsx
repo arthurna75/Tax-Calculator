@@ -1,7 +1,6 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
 import { calcSettlement, type SettlementInput } from "@/lib/tax/calculations";
 import { downloadSettlementExcel } from "@/lib/tax/excelExport";
 import { createSettlement } from "@/lib/tax/settlements";
@@ -25,7 +24,6 @@ const DEFAULT_INPUT: SettlementInput = {
 };
 
 export default function CalculatorPage() {
-  const router = useRouter();
   const [input, setInput] = useState<SettlementInput>(DEFAULT_INPUT);
   const [saving, setSaving] = useState(false);
 
@@ -48,8 +46,8 @@ export default function CalculatorPage() {
     if (!title) return;
     setSaving(true);
     try {
-      const { id } = await createSettlement(title, 2025, input, result);
-      router.push(`/records/${id}`);
+      await createSettlement(title, 2025, input, result);
+      alert(`"${title}" 기록이 저장되었습니다.`);
     } catch (e) {
       alert(e instanceof Error ? e.message : "저장에 실패했습니다.");
     } finally {
