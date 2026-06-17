@@ -1,9 +1,11 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { calcSettlement, type SettlementInput } from "@/lib/tax/calculations";
 import { downloadSettlementExcel } from "@/lib/tax/excelExport";
 import { createSettlement } from "@/lib/tax/settlements";
+import { createClient } from "@/lib/supabase/client";
 import IncomeForm from "@/components/calculator/IncomeForm";
 import DeductionForm from "@/components/calculator/DeductionForm";
 import CreditForm from "@/components/calculator/CreditForm";
@@ -23,9 +25,17 @@ const DEFAULT_INPUT: SettlementInput = {
   G907: 0, G908: 0,
 };
 
+async function getUser() {
+  const supabase = createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  return user;
+}
+
 export default function CalculatorPage() {
+  const router = useRouter();
   const [input, setInput] = useState<SettlementInput>(DEFAULT_INPUT);
   const [saving, setSaving] = useState(false);
+  const [showAuthModal, setShowAuthModal] = useState(false);
 
   const result = useMemo(() => calcSettlement(input), [input]);
 
@@ -42,6 +52,9 @@ export default function CalculatorPage() {
   }
 
   async function handleSave() {
+    const user = await getUser();
+    if (!user) { setShowAuthModal(true); return; }
+
     const title = window.prompt("저장할 기록의 제목을 입력하세요.", "2025년 연말정산");
     if (!title) return;
     setSaving(true);
@@ -55,12 +68,16 @@ export default function CalculatorPage() {
     }
   }
 
+  async function handleAuthRequired() {
+    setShowAuthModal(true);
+  }
+
   return (
     <div className="calculator-page">
       <div className="calculator-forms">
         <div className="calculator-toolbar">
           <ExcelUpload onLoaded={handleExcelLoaded} onReset={handleReset} />
-          <LoadRecordModal onLoaded={handleExcelLoaded} />
+          <LoadRecordModal onLoaded={handleExcelLoaded} onAuthRequired={handleAuthRequired} />
           <ScenarioSelector onSelect={(input) => setInput(input)} />
         </div>
         <IncomeForm input={input} result={result} onChange={patch} />
@@ -77,6 +94,32 @@ export default function CalculatorPage() {
           </button>
         </div>
       </div>
+
+      {showAuthModal && (
+        <div className="record-modal-backdrop" onClick={() => setShowAuthModal(false)}>
+          <div className="record-modal-box auth-modal-box" onClick={(e) => e.stopPropagation()}>
+            <div className="auth-modal-icon">🔐</div>
+            <h3 className="auth-modal-title">회원가입이 필요합니다</h3>
+            <p className="auth-modal-desc">
+              내 기록 저장 및 불러오기 기능은 로그인 후 이용할 수 있습니다.
+            </p>
+            <div className="auth-modal-actions">
+              <button
+                className="auth-modal-btn auth-modal-btn--primary"
+                onClick={() => router.push("/login")}
+              >
+                로그인 / 회원가입
+              </button>
+              <button
+                className="auth-modal-btn auth-modal-btn--cancel"
+                onClick={() => setShowAuthModal(false)}
+              >
+                취소
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

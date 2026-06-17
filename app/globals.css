@@ -960,6 +960,44 @@ a {
 .record-modal-title { font-weight: 600; font-size: 14px; }
 .record-modal-meta { font-size: 12px; color: #888; }
 
+/* ── 회원가입 필요 모달 ── */
+.auth-modal-box {
+  text-align: center;
+  max-width: 360px;
+}
+.auth-modal-icon { font-size: 40px; margin-bottom: 8px; }
+.auth-modal-title { font-size: 18px; font-weight: 700; margin-bottom: 10px; }
+.auth-modal-desc {
+  font-size: 14px;
+  color: #555;
+  margin-bottom: 20px;
+  line-height: 1.6;
+}
+.auth-modal-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.auth-modal-btn {
+  width: 100%;
+  padding: 12px;
+  border-radius: 6px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+}
+.auth-modal-btn--primary {
+  background: var(--blue-dark, #1f4e78);
+  color: #fff;
+}
+.auth-modal-btn--primary:hover { background: #174069; }
+.auth-modal-btn--cancel {
+  background: #f0f2f5;
+  color: #555;
+}
+.auth-modal-btn--cancel:hover { background: #e2e6ea; }
+
 /* ── 가상 시나리오 드롭다운 ── */
 .scenario-selector {
   position: relative;

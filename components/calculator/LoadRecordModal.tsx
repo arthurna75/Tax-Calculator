@@ -2,25 +2,31 @@
 
 import { useState } from "react";
 import { getSettlements, type SettlementRecord } from "@/lib/tax/settlements";
+import { createClient } from "@/lib/supabase/client";
 import type { SettlementInput } from "@/lib/tax/calculations";
 
 interface Props {
   onLoaded: (input: SettlementInput) => void;
+  onAuthRequired: () => void;
 }
 
-export default function LoadRecordModal({ onLoaded }: Props) {
+export default function LoadRecordModal({ onLoaded, onAuthRequired }: Props) {
   const [open, setOpen] = useState(false);
   const [records, setRecords] = useState<SettlementRecord[]>([]);
   const [loading, setLoading] = useState(false);
 
   async function handleOpen() {
+    const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) { onAuthRequired(); return; }
+
     setLoading(true);
     try {
       const data = await getSettlements();
       setRecords(data);
       setOpen(true);
     } catch {
-      alert("기록을 불러오지 못했습니다. 로그인 상태를 확인해주세요.");
+      alert("기록을 불러오지 못했습니다.");
     } finally {
       setLoading(false);
     }
