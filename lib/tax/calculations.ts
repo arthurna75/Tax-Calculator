@@ -32,7 +32,6 @@ export interface SettlementInput {
   // ── 기타 소득공제 ──
   G218: number; // 벤처투자조합 출자공제
   G219: number; // 소기업·소상공인 공제부금
-  housingLoan: number; // 주택임차차입금 원리금상환액 (구 G113)
   G115: number; // 장기주택저당차입금 이자상환액
 
   // ── 세액공제 — 자녀 ──
@@ -96,7 +95,6 @@ export interface SettlementResult {
   card: CardDeductionResult;
   venture: number;
   smallbiz: number;
-  rentLoan: number;
   mtgInt: number;
   otherDed: number;
   totalDeduction: number;
@@ -286,9 +284,8 @@ export function calcSettlement(input: SettlementInput): SettlementResult {
 
   const venture = input.G218;
   const smallbiz = input.G219;
-  const rentLoan = input.housingLoan;
   const mtgInt = input.G115;
-  const otherDed = venture + smallbiz + card.total + rentLoan + mtgInt;
+  const otherDed = venture + smallbiz + card.total + mtgInt;
 
   const totalDeduction = personalDed + pension + insurDed + otherDed;
   const taxBase = Math.max(earnedIncome - totalDeduction, 0);
@@ -319,7 +316,7 @@ export function calcSettlement(input: SettlementInput): SettlementResult {
     selfDed, depDed, elderDed, disabDed, womanDed, singleDed, personalDed,
     pension, health, ltcare, employ, insurDed,
     card,
-    venture, smallbiz, rentLoan, mtgInt, otherDed,
+    venture, smallbiz, mtgInt, otherDed,
     totalDeduction, taxBase,
     calcTax,
     laborCredit, childCredit, insCredit, medCredit, eduCredit, donCredit, retCredit, penCredit, totalCredit,

@@ -864,6 +864,102 @@ a {
   margin-top: 2px;
 }
 
+/* ── 계산기 상단 툴바 (업로드 + 기록 불러오기) ── */
+.calculator-toolbar {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  margin-bottom: 8px;
+}
+
+/* ── 내 기록 불러오기 버튼 ── */
+.load-record-btn {
+  background: #f0f4f8;
+  color: var(--blue-dark, #1f4e78);
+  border: 1px solid #c5d2e0;
+  border-radius: 6px;
+  padding: 8px 18px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.load-record-btn:hover { background: #e0ecf8; }
+.load-record-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+
+/* ── 내 기록 불러오기 모달 ── */
+.record-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.record-modal-box {
+  background: #fff;
+  border-radius: 10px;
+  padding: 24px;
+  width: 90%;
+  max-width: 480px;
+  max-height: 70vh;
+  overflow-y: auto;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.18);
+}
+
+.record-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+.record-modal-header h3 { font-size: 16px; }
+.record-modal-close {
+  background: none;
+  border: none;
+  font-size: 18px;
+  cursor: pointer;
+  color: #666;
+  padding: 2px 6px;
+  line-height: 1;
+}
+.record-modal-close:hover { color: #c00; }
+
+.record-modal-empty {
+  text-align: center;
+  color: #888;
+  padding: 24px 0;
+  font-size: 14px;
+}
+
+.record-modal-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.record-modal-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  border: 1px solid #dce3ea;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.record-modal-item:hover {
+  background: #f0f4f8;
+  border-color: var(--blue-dark, #1f4e78);
+}
+
+.record-modal-title { font-weight: 600; font-size: 14px; }
+.record-modal-meta { font-size: 12px; color: #888; }
+
 @media (max-width: 700px) {
   .credit-pair {
     grid-template-columns: 1fr;

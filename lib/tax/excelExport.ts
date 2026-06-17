@@ -89,7 +89,7 @@ export function buildCodeMap(r: SettlementResult): Record<string, number> {
     G011: r.elderDed + r.disabDed + r.womanDed + r.singleDed,
     G015: r.pension, G111: r.health, G154: r.ltcare, G112: r.employ,
     G136: r.insurDed,
-    G218: r.venture, G219: r.smallbiz, G113: r.rentLoan, G115: r.mtgInt,
+    G218: r.venture, G219: r.smallbiz, G115: r.mtgInt,
     G223: r.card.cc, G205: r.card.cash, G222: r.card.dc,
     G257: r.card.cult, G258: 0, G259: 0,
     G228: r.card.trad, G240: r.card.tran,
