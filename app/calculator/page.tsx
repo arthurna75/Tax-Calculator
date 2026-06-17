@@ -11,6 +11,7 @@ import CreditForm from "@/components/calculator/CreditForm";
 import ResultSteps from "@/components/calculator/ResultSteps";
 import ExcelUpload from "@/components/calculator/ExcelUpload";
 import LoadRecordModal from "@/components/calculator/LoadRecordModal";
+import ScenarioSelector from "@/components/calculator/ScenarioSelector";
 
 const DEFAULT_INPUT: SettlementInput = {
   S001: 0, S002: 0, S013: 0, nontaxEtc: 0,
@@ -62,6 +63,7 @@ export default function CalculatorPage() {
         <div className="calculator-toolbar">
           <ExcelUpload onLoaded={handleExcelLoaded} onReset={handleReset} />
           <LoadRecordModal onLoaded={handleExcelLoaded} />
+          <ScenarioSelector onSelect={(input) => setInput(input)} />
         </div>
         <IncomeForm input={input} result={result} onChange={patch} />
         <DeductionForm input={input} result={result} onChange={patch} />

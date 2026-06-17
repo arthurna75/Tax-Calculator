@@ -59,9 +59,9 @@ export default function CreditForm({ input, result, onChange }: Props) {
       <h3>의료비</h3>
       <div className="credit-pair credit-pair--multi">
         <div className="credit-pair-base">
-          <NumberField code="G118" label="의료비 (일반)" value={input.G118} onChange={(v) => onChange({ G118: v })} />
-          <NumberField code="G198" label="의료비 (난임시술비)" value={input.G198} onChange={(v) => onChange({ G198: v })} />
-          <NumberField code="G199" label="의료비 (미숙아·선천성이상아)" value={input.G199} onChange={(v) => onChange({ G199: v })} />
+          <NumberField code="G118" label="기타의료비 (부양가족 일반)" value={input.G118} onChange={(v) => onChange({ G118: v })} />
+          <NumberField code="G198" label="본인 의료비 (본인·장애인·중증질환)" value={input.G198} onChange={(v) => onChange({ G198: v })} />
+          <NumberField code="G199" label="65세이상 의료비" value={input.G199} onChange={(v) => onChange({ G199: v })} />
         </div>
         <div className="credit-pair-arrow">→</div>
         <div className="credit-pair-result">

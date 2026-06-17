@@ -960,6 +960,65 @@ a {
 .record-modal-title { font-weight: 600; font-size: 14px; }
 .record-modal-meta { font-size: 12px; color: #888; }
 
+/* ── 가상 시나리오 드롭다운 ── */
+.scenario-selector {
+  position: relative;
+  display: inline-block;
+}
+
+.scenario-btn {
+  background: #fff8e1;
+  color: #7a5c00;
+  border: 1px solid #f0cc50;
+  border-radius: 6px;
+  padding: 8px 16px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.scenario-btn:hover { background: #fff3c4; }
+
+.scenario-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  background: #fff;
+  border: 1px solid #dce3ea;
+  border-radius: 8px;
+  box-shadow: 0 6px 20px rgba(0,0,0,0.12);
+  z-index: 100;
+  min-width: 220px;
+  overflow: hidden;
+}
+
+.scenario-dropdown-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  width: 100%;
+  padding: 12px 16px;
+  background: none;
+  border: none;
+  border-bottom: 1px solid #f0f2f5;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.12s;
+}
+.scenario-dropdown-item:last-child { border-bottom: none; }
+.scenario-dropdown-item:hover { background: #f0f4f8; }
+
+.scenario-dropdown-label {
+  font-size: 14px;
+  font-weight: 700;
+  color: #1f4e78;
+}
+.scenario-dropdown-desc {
+  font-size: 12px;
+  color: #888;
+  margin-top: 2px;
+}
+
 /* ── 엑셀 업로드 상세 결과 ── */
 .upload-detail {
   margin-top: 10px;
