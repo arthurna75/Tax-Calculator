@@ -798,3 +798,28 @@ a {
 .upload-reset-btn:hover {
   background: #f0f2f5;
 }
+
+/* ── 코드 관리 접근 제한 ── */
+.admin-readonly-notice {
+  font-size: 13px;
+  color: #888;
+  margin-bottom: 12px;
+  padding: 8px 12px;
+  background: #f5f7fb;
+  border-radius: 6px;
+  border-left: 3px solid #ccd3dc;
+}
+
+.admin-only-trigger {
+  cursor: pointer;
+}
+
+.admin-only-modal {
+  text-align: center;
+  max-width: 300px;
+}
+
+.admin-only-icon {
+  font-size: 36px;
+  margin-bottom: 4px;
+}
